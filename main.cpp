@@ -1,5 +1,4 @@
-// === XIAO ESP32S3 Sense + DFPlayer Mini + HC-SR04 + Servo ===
-// Wi-Fi controller with distance-triggered audio playback + servo pulse + mDNS (.local)
+
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -7,44 +6,39 @@
 #include <HardwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
 #include <ESP32Servo.h>
-#include <ESPmDNS.h>
 
-// ---------- WiFi Access Point ----------
+
+
 const char* ssid = "troller";
 const char* password = "12345678";
 WebServer server(80);
 
-// ---------- DFPlayer ----------
 HardwareSerial mySerial(1);
 DFRobotDFPlayerMini myDFPlayer;
 
-// ---------- HC-SR04 ----------
 #define TRIG_PIN D6
 #define ECHO_PIN D7
 
-// ---------- Servo ----------
 #define SERVO_PIN D4
 Servo myServo;
 
-// ---------- State ----------
 int volumeLevel = 15;
 bool isPaused = false;
 float tripDistance = 160.0;
 bool tripEnabled = true;
-bool audioTriggered = false;       // NOTE: reset via "Reset Trip" or disabling trip
+bool audioTriggered = false;       
 float currentDistance = 0;
 unsigned long lastDistanceCheck = 0;
 const int DISTANCE_CHECK_INTERVAL = 100;
 int servoPosition = 90;
-int tripTrack = 1;                 // <-- Track to play when trip triggers (1–999)
+int tripTrack = 1;               
 
-// --- Trip servo sequence state ---
 enum ServoState { IDLE, MOVE_TO_180, HOLD_180, MOVE_TO_0, HOLD_0, RETURN };
 ServoState servoState = IDLE;
 unsigned long servoStateTimestamp = 0;
 const unsigned long SERVO_HOLD_MS = 700;
 
-// ---------- HTML page ----------
+
 const char htmlPage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -422,7 +416,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </html>
 )rawliteral";
 
-// ---------- Functions ----------
+
 float getDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
@@ -443,11 +437,10 @@ void checkDistanceTrigger() {
   if (!tripEnabled) return;
 
   if (currentDistance > 0 && currentDistance < tripDistance && !audioTriggered && servoState == IDLE) {
-    myDFPlayer.play(tripTrack);  // <-- play the configured trip song
+    myDFPlayer.play(tripTrack); 
     audioTriggered = true;
     Serial.printf("Distance trigger! Playing track %d. Distance: %.1f cm\n", tripTrack, currentDistance);
 
-    // Start servo sequence: 180° -> hold -> 0° -> hold -> return
     myServo.write(180);
     servoState = MOVE_TO_180;
     servoStateTimestamp = millis();
@@ -460,7 +453,7 @@ void updateServoSequence() {
 
   switch (servoState) {
     case MOVE_TO_180:
-      if (elapsed >= 500) {  // Wait for servo to reach 180°
+      if (elapsed >= 500) { 
         servoState = HOLD_180;
         servoStateTimestamp = millis();
         Serial.println("Holding at 180°");
@@ -477,7 +470,7 @@ void updateServoSequence() {
       break;
 
     case MOVE_TO_0:
-      if (elapsed >= 500) {  // Wait for servo to reach 0°
+      if (elapsed >= 500) {  
         servoState = HOLD_0;
         servoStateTimestamp = millis();
         Serial.println("Holding at 0°");
@@ -499,7 +492,6 @@ void updateServoSequence() {
   }
 }
 
-// ---------- Web Handlers ----------
 void handleRoot() { 
   server.send(200, "text/html", htmlPage); 
 }
@@ -519,7 +511,6 @@ void handleTripDistance() {
   server.send(400, "text/plain", "Invalid value");
 }
 
-// NEW: trip track handler
 void handleTripTrack() {
   if (server.hasArg("value")) {
     int t = server.arg("value").toInt();
@@ -556,7 +547,7 @@ void handleServo() {
   if (server.hasArg("pos")) {
     servoPosition = server.arg("pos").toInt();
     if (servoPosition >= 0 && servoPosition <= 180) {
-      if (servoState == IDLE) {  // Only move if not in sequence
+      if (servoState == IDLE) {  
         myServo.write(servoPosition);
       }
       Serial.printf("Servo position set to: %d\n", servoPosition);
@@ -615,20 +606,14 @@ void handleCommand(String cmd) {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\n=== XIAO ESP32S3 Troller Controller ===");
-
-  // ---------- HC-SR04 setup ----------
+  
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   digitalWrite(TRIG_PIN, LOW);
-  Serial.println("HC-SR04 ready.");
-
-  // ---------- Servo setup ----------
+  
   myServo.attach(SERVO_PIN);
   myServo.write(servoPosition);
-  Serial.println("Servo ready.");
-
-  // ---------- DFPlayer setup ----------
+  
   mySerial.begin(9600, SERIAL_8N1, D1, D0);
   delay(500);
   if (!myDFPlayer.begin(mySerial)) {
@@ -639,26 +624,16 @@ void setup() {
   myDFPlayer.EQ(DFPLAYER_EQ_NORMAL);
   Serial.println("DFPlayer ready.");
 
-  // ---------- WiFi AP setup ----------
   WiFi.softAP(ssid, password);
   Serial.print("Access Point: ");
   Serial.println(ssid);
   Serial.print("IP Address: ");
   Serial.println(WiFi.softAPIP());
 
-  // ---------- mDNS (.local) ----------
-  if (MDNS.begin("troller")) {
-    MDNS.addService("http", "tcp", 80);
-    Serial.println("mDNS responder started: http://troller.local");
-  } else {
-    Serial.println("Error setting up mDNS responder!");
-  }
-
-  // ---------- Web routes ----------
   server.on("/", handleRoot);
   server.on("/distance", handleDistance);
   server.on("/tripdist", handleTripDistance);
-  server.on("/triptrack", handleTripTrack);   // <-- NEW route
+  server.on("/triptrack", handleTripTrack);   
   server.on("/tripToggle", handleTripToggle);
   server.on("/resetTrip", handleResetTrip);
   server.on("/servo", handleServo);
@@ -673,7 +648,7 @@ void setup() {
 
   server.begin();
   Serial.println("HTTP server started.");
-  Serial.println("Open: http://troller.local (or fallback: http://192.168.4.1)");
+  Serial.println("Open the AP IP shown above in your browser (e.g., http://192.168.4.1)");
 }
 
 void loop() {
